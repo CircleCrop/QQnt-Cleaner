@@ -3,6 +3,10 @@ import re
 import shutil
 import logging
 import time
+import hashlib
+import sqlite3
+from glob import glob
+
 
 root_folder = r"C:\Users\CCrop\Documents\Tencent Files test"  # eg: X:\xxx\xxx\Tencent Files
 pic_db_path = "pics.db"
@@ -41,6 +45,14 @@ def format_size(size_in_bytes):
         return f"{size_in_bytes / 1024**2:.2f} MB"
     else:
         return f"{size_in_bytes / 1024**3:.2f} GB"
+
+
+def calculate_md5(file_path):
+    hash_md5 = hashlib.md5()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            hash_md5.update(chunk)
+    return hash_md5.hexdigest()
 
 
 def delete_empty_subfolders(path):
@@ -120,9 +132,42 @@ def delete_specific_file(file_path):
 
 def delete_qqnt_pics(root_path, db_file_path):
     # 连接到数据库
-    # 打开表 image_info，若不存在则创建
-    # 计算 Ori 图片 md5
+    conn = sqlite3.connect(db_file_path)
+    c = conn.cursor()
 
+    # 创建表 image_info，若不存在则创建
+    c.execute('''CREATE TABLE IF NOT EXISTS image_info 
+                 (id INTEGER PRIMARY KEY, type TEXT, md5 TEXT, size INTEGER, count INTEGER)''')
+
+    # 创建空列表 pic_records
+    pic_records = []
+
+    # 遍历 root_path\20**-**\Ori 里的所有文件
+    for file_path in glob(os.path.join(root_path, "20??-??", "Ori", "*")):
+        # 计算 Ori 图片 md5 和 大小（bytes）
+        md5 = calculate_md5(file_path)
+        size = os.path.getsize(file_path)
+
+        # 检查数据库中是否有相同的 md5 和大小记录
+        c.execute("SELECT id, count FROM image_info WHERE md5=? AND size=?", (md5, size))
+        record = c.fetchone()
+
+        if record:
+            # 如果找到记录，则更新次数
+            c.execute("UPDATE image_info SET count=count+1 WHERE id=?", (record[0],))
+            if record[1] + 1 > 3:
+                # 如果次数 > 3，则添加到 pic_records
+                pic_records.append((file_path, record[0]))
+        else:
+            # 若数据库找不到记录，则添加记录，次数初始为 1
+            c.execute("INSERT INTO image_info (type, md5, size, count) VALUES (?, ?, ?, ?)",
+                      ("Ori", md5, size, 1))
+
+    # 提交事务
+    conn.commit()
+    conn.close()
+
+    return pic_records
 
 
 for i_qq_folder in qqnumber_folder_root:
@@ -142,7 +187,8 @@ for i_qq_folder in qqnumber_folder_root:
 
     del_path_all(i_qq_folder + "\\Qzone")
 
-    delete_qqnt_pics(i_qq_folder + "Pic", pic_db_path)
+    # records = delete_qqnt_pics(i_qq_folder + "\\Pic", pic_db_path)
 
-time.sleep(0.4)
+time.sleep(0.2)
 print("Total released disk space: " + str(format_size(total_re_size)))
+# print(records)
