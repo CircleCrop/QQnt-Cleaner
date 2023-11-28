@@ -8,7 +8,7 @@ import sqlite3
 from glob import glob
 
 
-root_folder = r"C:\Users\CCrop\Documents\Tencent Files test"  # eg: X:\xxx\xxx\Tencent Files
+root_folder = r"C:\Users\CCrop\Documents\Tencent Files"  # eg: X:\xxx\xxx\Tencent Files
 pic_db_path = "pics.db"
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
